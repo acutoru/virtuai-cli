@@ -1,10 +1,19 @@
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::fs::File;
-use std::io::{copy, Write};
+use std::io::copy;
 use std::path::Path;
-// use uuid::Uuid;
+use structopt::StructOpt;
+
+#[cfg(feature = "hostname_local")]
+const HOSTNAME: &str = "localhost:8443";
+
+#[cfg(feature = "hostname_dev")]
+const HOSTNAME: &str = ""; //localhost以外の開発用サーバ
+
+// どちらのfeatureも無効な場合のデフォルト値
+#[cfg(not(any(feature = "hostname_local", feature = "hostname_dev")))]
+const HOSTNAME: &str = "virtuai.art";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReturnContentV1 {
@@ -26,12 +35,21 @@ pub struct ReturnContentV1 {
                  // custom_divide_contents: Vec<common::RateMapV1>, // カスタム分配率（contentsID: 割合 の配列）
 }
 
-async fn package(packageid: String) -> Result<()> {
-    let hostname = "localhost:8443";
-    let url = format!("https://{hostname}/v1/contents/object/test_user/package/{packageid}"); // テスト用のAPIエンドポイント
+#[derive(StructOpt, Debug)]
+enum Cli {
+    Package {
+        packageid: String,
+        #[structopt(short, long, default_value = "100")]
+        limit: usize,
+    },
+}
+
+async fn package(packageid: String, limit: usize) -> Result<()> {
+    let url = format!("https://{HOSTNAME}/v1/contents/object/test_user/package/{packageid}"); // テスト用のAPIエンドポイント
+    dbg!(&url);
     let response: Vec<ReturnContentV1> = reqwest::get(url).await?.json().await?; // GETリクエストを送信してJSONレスポンスを取得
     println!("{:?}", response); // レスポンスを表示
-    for item in response {
+    for item in response.iter().take(limit) {
         let imageurl = item.obj.to_string();
         println!("download {:?}", imageurl);
         let response2 = reqwest::get(&imageurl).await?; // GETリクエストを送信してJSONレスポンスを取得
@@ -55,12 +73,11 @@ async fn package(packageid: String) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
-        let subcommand = &args[1];
-        if subcommand == "package" {
-            let packageid = args[2].to_string();
-            package(packageid).await?;
+    let args = Cli::from_args();
+    dbg!(&args);
+    match args {
+        Cli::Package { packageid, limit } => {
+            package(packageid, limit).await?;
         }
     }
     Ok(())
