@@ -45,7 +45,16 @@ enum Cli {
 }
 
 async fn package(packageid: String, limit: usize) -> Result<()> {
-    let url = format!("https://{HOSTNAME}/v1/contents/object/test_user/package/{packageid}"); // テスト用のAPIエンドポイント
+    let url = format!(r#"https://{HOSTNAME}/graphql?query=
+    query{{
+        content(id: "{packageid}", author: "testUser", contentType: "package") {{
+            id
+            title
+            content
+            obj
+            pageView
+        }}
+    }}"#); // テスト用のAPIエンドポイント
     dbg!(&url);
     let response: Vec<ReturnContentV1> = reqwest::get(url).await?.json().await?; // GETリクエストを送信してJSONレスポンスを取得
     println!("{:?}", response); // レスポンスを表示
